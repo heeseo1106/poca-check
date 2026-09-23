@@ -287,11 +287,10 @@
                 let col3 = row[2] !== undefined ? String(row[2]).trim() : '';
                 let col4 = row[3] !== undefined ? String(row[3]).trim() : '';
 
-                // 이미 'AA01_123456' 처럼 하나의 코드일 경우
+                // 단일 코드 및 멤버+포카 조합 처리 (중복 출력 방지)
                 if (col3.includes('_')) {
                     photoCardId = col3;
                 } else if (col3 && col4) {
-                    // 멤버코드(col3) + 포토카드번호(col4) 조합
                     photoCardId = `${col3}_${col4}`;
                 } else if (col3) {
                     photoCardId = col3;

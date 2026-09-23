@@ -1,0 +1,660 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>포토카드 피킹 더블체크 시스템</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- SheetJS (xlsx) for Excel processing -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Pretendard:wght@300;400;500;600;700;800&display=swap');
+        body {
+            font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        }
+        /* Custom scrollbar for table */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #f1f5f9;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8;
+        }
+        .pulse-border {
+            box-shadow: 0 0 0 0 rgba(244, 63, 94, 0.4);
+            animation: pulse-ring 1.8s infinite cubic-bezier(0.66, 0, 0, 1);
+        }
+        @keyframes pulse-ring {
+            to {
+                box-shadow: 0 0 0 10px rgba(244, 63, 94, 0);
+            }
+        }
+    </style>
+</head>
+<body class="bg-slate-100 text-slate-800 min-h-screen flex flex-col antialiased selection:bg-rose-100 selection:text-rose-700">
+
+    <!-- Header Section -->
+    <header class="bg-white border-b border-slate-200 sticky top-0 z-40 shadow-xs">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 sm:h-20 flex items-center justify-between">
+            <div class="flex items-center space-x-3.5">
+                <!-- Coral Red Icon Box -->
+                <div class="p-2.5 bg-rose-500 rounded-xl text-white shadow-md shadow-rose-200">
+                    <i data-lucide="scan-line" class="w-6 h-6 sm:w-7 sm:h-7"></i>
+                </div>
+                <div>
+                    <h1 class="font-extrabold text-xl text-slate-900 tracking-tight">포토카드 피킹 더블체크</h1>
+                </div>
+            </div>
+            
+            <div id="uidBadge" class="hidden items-center space-x-2.5 bg-rose-50 border border-rose-200 px-4 py-2 rounded-xl shadow-xs">
+                <i data-lucide="user-check" class="w-4 h-4 text-rose-500"></i>
+                <span class="text-xs font-semibold text-slate-600">검수 대상 UID:</span>
+                <span id="uidDisplay" class="text-base font-extrabold text-rose-600 font-mono">-</span>
+            </div>
+        </div>
+    </header>
+
+    <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 flex flex-col gap-6">
+
+        <!-- Top Section: Upload Box & Stats Row -->
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <!-- File Upload Box -->
+            <div class="lg:col-span-1 bg-white border border-slate-200 rounded-2xl p-5 shadow-xs flex flex-col justify-between">
+                <div>
+                    <h2 class="text-sm font-bold text-slate-800 mb-1 flex items-center gap-2">
+                        <i data-lucide="file-up" class="w-4 h-4 text-rose-500"></i>
+                        엑셀 파일 업로드
+                    </h2>
+                    <p class="text-xs text-slate-500 mb-3">파일명 속 숫자가 유저 UID로 자동 추출됩니다.</p>
+                </div>
+
+                <div id="dropZone" class="border-2 border-dashed border-slate-300 hover:border-rose-400 rounded-xl p-5 flex flex-col items-center justify-center text-center cursor-pointer transition-all bg-slate-50/60 hover:bg-rose-50/30 group">
+                    <input type="file" id="fileInput" accept=".xlsx, .xls, .csv" class="hidden">
+                    <div class="p-3 bg-white group-hover:bg-rose-500 text-slate-500 group-hover:text-white rounded-full transition-colors mb-2 shadow-xs border border-slate-200">
+                        <i data-lucide="upload-cloud" class="w-5 h-5"></i>
+                    </div>
+                    <span id="fileNameDisplay" class="text-xs font-semibold text-slate-700">엑셀 파일 선택 또는 드롭</span>
+                    <span class="text-[11px] text-slate-400 mt-0.5">.xlsx, .xls, .csv</span>
+                </div>
+
+                <div class="mt-3 flex items-center justify-between text-xs text-slate-500">
+                    <span id="fileStatusText" class="font-medium">파일 대기 중</span>
+                    <button id="resetBtn" class="hidden hover:text-rose-600 font-semibold text-slate-500 flex items-center gap-1 transition-colors">
+                        <i data-lucide="rotate-ccw" class="w-3.5 h-3.5"></i> 초기화
+                    </button>
+                </div>
+            </div>
+
+            <!-- Stats Counter Cards -->
+            <div class="lg:col-span-2 bg-white border border-slate-200 rounded-2xl p-5 shadow-xs flex flex-col justify-between">
+                <div class="flex justify-between items-center mb-3">
+                    <h2 class="text-sm font-bold text-slate-800 flex items-center gap-2">
+                        <i data-lucide="bar-chart-3" class="w-4 h-4 text-rose-500"></i>
+                        더블체크 현황
+                    </h2>
+                    <span id="completionBadge" class="hidden px-3 py-1 text-xs font-extrabold bg-emerald-100 text-emerald-800 border border-emerald-300 rounded-full items-center gap-1.5 animate-pulse shadow-xs">
+                        <i data-lucide="check-circle-2" class="w-4 h-4 text-emerald-600"></i> 검수 완료!
+                    </span>
+                </div>
+
+                <!-- Numbers Cards Grid -->
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div class="bg-slate-50 border border-slate-200/80 rounded-xl p-4">
+                        <span class="text-xs font-semibold text-slate-500 block mb-1">총 피킹 수량</span>
+                        <div class="text-2xl font-extrabold text-slate-900"><span id="statTargetUnits">0</span> <span class="text-xs text-slate-400 font-normal">개</span></div>
+                    </div>
+                    <div class="bg-emerald-50/60 border border-emerald-200/80 rounded-xl p-4">
+                        <span class="text-xs font-semibold text-emerald-700 block mb-1">확인 완료 수량</span>
+                        <div class="text-2xl font-extrabold text-emerald-600"><span id="statCheckedUnits">0</span> <span class="text-xs text-emerald-600/70 font-normal">개</span></div>
+                    </div>
+                    <div class="bg-amber-50/60 border border-amber-200/80 rounded-xl p-4">
+                        <span class="text-xs font-semibold text-amber-800 block mb-1">미검수 잔여 수량</span>
+                        <div class="text-2xl font-extrabold text-amber-600"><span id="statRemainingUnits">0</span> <span class="text-xs text-amber-600/70 font-normal">개</span></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Barcode Input Bar -->
+        <div class="bg-white border border-slate-200 rounded-2xl p-4 shadow-xs flex flex-col md:flex-row items-center gap-4">
+            <div class="relative flex-1 w-full">
+                <div class="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
+                    <i data-lucide="barcode" class="w-5 h-5 text-rose-500"></i>
+                </div>
+                <input 
+                    type="text" 
+                    id="barcodeInput" 
+                    placeholder="바코드를 스캔하세요 (예: AA06_214749)..." 
+                    class="w-full pl-11 pr-24 py-3 bg-slate-50 border-2 border-rose-200 focus:border-rose-500 rounded-xl text-slate-900 placeholder-slate-400 font-mono font-semibold text-base focus:outline-none focus:ring-4 focus:ring-rose-100 transition-all pulse-border"
+                    disabled
+                >
+                <button id="manualCheckBtn" class="absolute right-2 top-2 bottom-2 px-4 bg-rose-500 hover:bg-rose-600 active:bg-rose-700 disabled:opacity-40 text-white font-bold text-xs rounded-lg transition-colors flex items-center gap-1 shadow-xs" disabled>
+                    <i data-lucide="corner-down-left" class="w-3.5 h-3.5"></i> 입력
+                </button>
+            </div>
+
+            <button id="exportBtn" disabled class="w-full md:w-auto px-5 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl transition-colors flex items-center justify-center gap-2 whitespace-nowrap border border-slate-300 disabled:opacity-40 shadow-xs">
+                <i data-lucide="download" class="w-4 h-4 text-emerald-600"></i> 결과 엑셀 추출
+            </button>
+        </div>
+
+        <!-- Main Data Table (4 Columns) -->
+        <div class="bg-white border border-slate-200 rounded-2xl shadow-xs flex-1 flex flex-col overflow-hidden min-h-[420px]">
+            <div class="p-4 border-b border-slate-200 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 bg-slate-50/80">
+                <h3 class="font-bold text-slate-800 flex items-center gap-2 text-sm">
+                    <i data-lucide="list-checks" class="w-4 h-4 text-rose-500"></i>
+                    피킹 검수 목록
+                </h3>
+                
+                <!-- Filter Tabs -->
+                <div class="flex items-center bg-slate-200/70 p-1 rounded-xl text-xs font-semibold text-slate-600 self-stretch sm:self-auto justify-stretch">
+                    <button id="filterAll" class="filter-tab active flex-1 sm:flex-none px-3 py-1 rounded-lg bg-white text-rose-600 shadow-xs transition-all">전체</button>
+                    <button id="filterPending" class="filter-tab flex-1 sm:flex-none px-3 py-1 rounded-lg hover:text-slate-900 transition-all">미검수</button>
+                    <button id="filterCompleted" class="filter-tab flex-1 sm:flex-none px-3 py-1 rounded-lg hover:text-slate-900 transition-all">확인 완료</button>
+                </div>
+            </div>
+
+            <div class="overflow-x-auto flex-1">
+                <table class="w-full text-left text-sm border-collapse">
+                    <thead>
+                        <tr class="bg-slate-100 text-slate-600 font-bold border-b border-slate-200 text-xs uppercase tracking-wider">
+                            <th class="py-3.5 px-6">컬렉션 번호</th>
+                            <th class="py-3.5 px-6">입고번호</th>
+                            <th class="py-3.5 px-6">포토카드 ID</th>
+                            <th class="py-3.5 px-6 text-center w-36">확인 상태</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tableBody" class="divide-y divide-slate-100 font-mono">
+                        <!-- Empty State -->
+                        <tr id="emptyRow">
+                            <td colspan="4" class="py-24 text-center text-slate-400 font-sans">
+                                <i data-lucide="file-spreadsheet" class="w-12 h-12 mx-auto mb-3 text-slate-300"></i>
+                                <p class="text-sm font-semibold text-slate-600">업로드된 엑셀 데이터가 없습니다.</p>
+                                <p class="text-xs text-slate-400 mt-1">상단에서 피킹 엑셀 파일을 업로드해 주세요.</p>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+    </main>
+
+    <!-- Notification Toast Container -->
+    <div id="toastContainer" class="fixed bottom-5 right-5 z-50 flex flex-col gap-2 pointer-events-none"></div>
+
+    <script>
+        // --- State Management ---
+        let listData = []; // Array of { id, collectionId, inboundNo, cardId, isChecked, checkedTime }
+        let currentUID = null;
+        let activeFilter = 'all'; // 'all', 'pending', 'completed'
+        let audioCtx = null;
+
+        // --- DOM Elements ---
+        const dropZone = document.getElementById('dropZone');
+        const fileInput = document.getElementById('fileInput');
+        const fileNameDisplay = document.getElementById('fileNameDisplay');
+        const fileStatusText = document.getElementById('fileStatusText');
+        const resetBtn = document.getElementById('resetBtn');
+        const uidBadge = document.getElementById('uidBadge');
+        const uidDisplay = document.getElementById('uidDisplay');
+        const barcodeInput = document.getElementById('barcodeInput');
+        const manualCheckBtn = document.getElementById('manualCheckBtn');
+        const exportBtn = document.getElementById('exportBtn');
+        const tableBody = document.getElementById('tableBody');
+        const emptyRow = document.getElementById('emptyRow');
+        
+        // Stats Elements
+        const statTargetUnits = document.getElementById('statTargetUnits');
+        const statCheckedUnits = document.getElementById('statCheckedUnits');
+        const statRemainingUnits = document.getElementById('statRemainingUnits');
+        const completionBadge = document.getElementById('completionBadge');
+
+        // Filter Elements
+        const filterAll = document.getElementById('filterAll');
+        const filterPending = document.getElementById('filterPending');
+        const filterCompleted = document.getElementById('filterCompleted');
+
+        // --- Audio Feedback (Web Audio API) ---
+        function initAudio() {
+            if (!audioCtx) {
+                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            }
+        }
+
+        function playSound(type) {
+            try {
+                initAudio();
+                if (audioCtx.state === 'suspended') {
+                    audioCtx.resume();
+                }
+
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+
+                if (type === 'success') {
+                    // High-tone beep for valid scan
+                    osc.type = 'sine';
+                    osc.frequency.setValueAtTime(1000, audioCtx.currentTime);
+                    gain.gain.setValueAtTime(0.12, audioCtx.currentTime);
+                    gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.12);
+                    osc.start();
+                    osc.stop(audioCtx.currentTime + 0.12);
+                } else if (type === 'complete') {
+                    // Success fanfare
+                    [523.25, 659.25, 783.99, 1046.50].forEach((freq, i) => {
+                        const o = audioCtx.createOscillator();
+                        const g = audioCtx.createGain();
+                        o.connect(g);
+                        g.connect(audioCtx.destination);
+                        o.frequency.value = freq;
+                        g.gain.setValueAtTime(0.1, audioCtx.currentTime + i * 0.08);
+                        g.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + i * 0.08 + 0.35);
+                        o.start(audioCtx.currentTime + i * 0.08);
+                        o.stop(audioCtx.currentTime + i * 0.08 + 0.35);
+                    });
+                } else if (type === 'error') {
+                    // Error buzzer
+                    osc.type = 'sawtooth';
+                    osc.frequency.setValueAtTime(180, audioCtx.currentTime);
+                    gain.gain.setValueAtTime(0.18, audioCtx.currentTime);
+                    gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.25);
+                    osc.start();
+                    osc.stop(audioCtx.currentTime + 0.25);
+                }
+            } catch (e) {
+                console.warn('Audio play error:', e);
+            }
+        }
+
+        function showToast(message, type = 'info') {
+            const toastContainer = document.getElementById('toastContainer');
+            const toast = document.createElement('div');
+            
+            let bgClass = 'bg-slate-900 text-white border-slate-700';
+            let iconName = 'info';
+            
+            if (type === 'success') {
+                bgClass = 'bg-emerald-600 text-white border-emerald-700 shadow-emerald-100';
+                iconName = 'check-circle-2';
+            } else if (type === 'error') {
+                bgClass = 'bg-rose-600 text-white border-rose-700 shadow-rose-100';
+                iconName = 'alert-octagon';
+            } else if (type === 'warning') {
+                bgClass = 'bg-amber-500 text-white border-amber-600 shadow-amber-100';
+                iconName = 'alert-triangle';
+            }
+
+            toast.className = `flex items-center gap-3 px-4 py-3 rounded-xl border shadow-xl text-xs sm:text-sm font-semibold transition-all duration-300 transform translate-y-2 opacity-0 ${bgClass}`;
+            toast.innerHTML = `
+                <i data-lucide="${iconName}" class="w-5 h-5 flex-shrink-0"></i>
+                <span class="font-sans">${message}</span>
+            `;
+
+            toastContainer.appendChild(toast);
+            lucide.createIcons();
+
+            requestAnimationFrame(() => {
+                toast.classList.remove('translate-y-2', 'opacity-0');
+            });
+
+            setTimeout(() => {
+                toast.classList.add('opacity-0', 'translate-y-2');
+                setTimeout(() => toast.remove(), 300);
+            }, 3000);
+        }
+
+        dropZone.addEventListener('click', () => fileInput.click());
+        
+        ['dragenter', 'dragover'].forEach(eventName => {
+            dropZone.addEventListener(eventName, (e) => {
+                e.preventDefault();
+                dropZone.classList.add('border-indigo-500', 'bg-indigo-50/50');
+            }, false);
+        });
+
+        ['dragleave', 'drop'].forEach(eventName => {
+            dropZone.addEventListener(eventName, (e) => {
+                e.preventDefault();
+                dropZone.classList.remove('border-indigo-500', 'bg-indigo-50/50');
+            }, false);
+        });
+
+        dropZone.addEventListener('drop', (e) => {
+            const files = e.dataTransfer.files;
+            if (files.length > 0) handleFile(files[0]);
+        });
+
+        fileInput.addEventListener('change', (e) => {
+            if (e.target.files.length > 0) handleFile(e.target.files[0]);
+        });
+
+        function handleFile(file) {
+            if (!file.name.match(/\.(xlsx|xls|csv)$/i)) {
+                showToast('엑셀(.xlsx, .xls) 또는 .csv 파일만 업로드 가능합니다.', 'error');
+                playSound('error');
+                return;
+            }
+
+            // Extract numbers from filename for UID
+            const match = file.name.match(/\d+/);
+            currentUID = match ? match[0] : file.name.replace(/\.[^/.]+$/, "");
+
+            const reader = new FileReader();
+            reader.onload = function (e) {
+                try {
+                    const data = new Uint8Array(e.target.result);
+                    const workbook = XLSX.read(data, { type: 'array' });
+                    const firstSheetName = workbook.SheetNames[0];
+                    const worksheet = workbook.Sheets[firstSheetName];
+                    const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+
+                    processExcelRows(jsonData, file.name);
+                } catch (err) {
+                    console.error(err);
+                    showToast('엑셀 파일 읽기 실패. 파일 구성을 확인해 주세요.', 'error');
+                    playSound('error');
+                }
+            };
+            reader.readAsArrayBuffer(file);
+        }
+
+        function processExcelRows(rows, fileName) {
+            if (!rows || rows.length === 0) {
+                showToast('엑셀에 데이터가 비어 있습니다.', 'error');
+                return;
+            }
+
+            listData = [];
+            let startRow = 0;
+
+            // Detect Header
+            if (rows.length > 0 && rows[0][0]) {
+                const firstVal = String(rows[0][0]).trim().toLowerCase();
+                if (firstVal.includes('컬렉션') || firstVal.includes('collection') || firstVal.includes('id') || firstVal.includes('번호')) {
+                    startRow = 1;
+                }
+            }
+
+            for (let i = startRow; i < rows.length; i++) {
+                const row = rows[i];
+                if (!row || row.length === 0) continue;
+
+                // Col 1: 컬렉션 번호, Col 2: 입고번호, Col 3: 포토카드 ID
+                const col1 = row[0] !== undefined ? String(row[0]).trim() : '-';
+                const col2 = row[1] !== undefined ? String(row[1]).trim() : '-';
+                const col3 = row[2] !== undefined ? String(row[2]).trim() : '';
+
+                if (col3) {
+                    listData.push({
+                        id: `row-${i}-${col3}`,
+                        collectionId: col1,
+                        inboundNo: col2,
+                        cardId: col3,
+                        isChecked: false,
+                        checkedTime: '-'
+                    });
+                }
+            }
+
+            if (listData.length === 0) {
+                showToast('3열에서 포토카드 ID를 찾을 수 없습니다.', 'error');
+                playSound('error');
+                return;
+            }
+
+            // Update Interface
+            fileNameDisplay.textContent = fileName;
+            fileStatusText.textContent = '업로드 로드 완료';
+            resetBtn.classList.remove('hidden');
+            uidDisplay.textContent = currentUID;
+            uidBadge.classList.remove('hidden');
+            uidBadge.classList.add('flex');
+
+            barcodeInput.disabled = false;
+            manualCheckBtn.disabled = false;
+            exportBtn.disabled = false;
+
+            renderTable();
+            updateStats();
+            focusBarcodeInput();
+
+            showToast(`UID: ${currentUID} - 총 ${listData.length}개 피킹 항목 생성 완료`, 'success');
+            playSound('success');
+        }
+
+        function renderTable() {
+            tableBody.innerHTML = '';
+
+            let filteredData = listData;
+            if (activeFilter === 'pending') {
+                filteredData = listData.filter(i => !i.isChecked);
+            } else if (activeFilter === 'completed') {
+                filteredData = listData.filter(i => i.isChecked);
+            }
+
+            if (filteredData.length === 0) {
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td colspan="4" class="py-12 text-center text-slate-400 font-sans">
+                        <p class="text-sm font-semibold">해당 조건에 부합하는 데이터가 없습니다.</p>
+                    </td>
+                `;
+                tableBody.appendChild(tr);
+                return;
+            }
+
+            filteredData.forEach((item) => {
+                const tr = document.createElement('tr');
+                tr.id = item.id;
+
+                let rowBgClass = 'hover:bg-slate-50 transition-colors text-slate-800';
+                let statusBadge = '<span class="px-2.5 py-1 rounded-full text-xs font-semibold bg-slate-100 text-slate-500 border border-slate-200">대기</span>';
+
+                if (item.isChecked) {
+                    rowBgClass = 'bg-emerald-50/70 hover:bg-emerald-100/50 text-slate-900 border-l-4 border-l-emerald-500';
+                    statusBadge = '<span class="px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 border border-emerald-300 flex items-center gap-1 justify-center"><i data-lucide="check" class="w-3.5 h-3.5 text-emerald-600"></i> 확인 완료</span>';
+                }
+
+                tr.className = rowBgClass;
+                tr.innerHTML = `
+                    <td class="py-3.5 px-6 font-semibold text-slate-700">${item.collectionId}</td>
+                    <td class="py-3.5 px-6 text-rose-600 font-bold">${item.inboundNo}</td>
+                    <td class="py-3.5 px-6 font-extrabold tracking-wide ${item.isChecked ? 'text-emerald-800' : 'text-slate-900'}">${item.cardId}</td>
+                    <td class="py-3.5 px-6 text-center">${statusBadge}</td>
+                `;
+
+                tableBody.appendChild(tr);
+            });
+
+            lucide.createIcons();
+        }
+
+        function updateStats() {
+            const total = listData.length;
+            const checked = listData.filter(i => i.isChecked).length;
+            const remaining = total - checked;
+
+            statTargetUnits.textContent = total.toLocaleString();
+            statCheckedUnits.textContent = checked.toLocaleString();
+            statRemainingUnits.textContent = remaining.toLocaleString();
+
+            if (checked === total && total > 0) {
+                completionBadge.classList.remove('hidden');
+                completionBadge.classList.add('flex');
+            } else {
+                completionBadge.classList.add('hidden');
+                completionBadge.classList.remove('flex');
+            }
+        }
+
+        function focusBarcodeInput() {
+            setTimeout(() => {
+                barcodeInput.focus();
+            }, 100);
+        }
+
+        function processBarcodeScan() {
+            const scannedCode = barcodeInput.value.trim();
+            barcodeInput.value = '';
+
+            if (!scannedCode) return;
+
+            if (listData.length === 0) {
+                showToast('업로드된 포토카드 리스트가 없습니다.', 'warning');
+                playSound('error');
+                return;
+            }
+
+            // Match scanned code against cardId (Column 3)
+            const matches = listData.filter(i => i.cardId.toLowerCase() === scannedCode.toLowerCase());
+
+            if (matches.length === 0) {
+                showToast(`[불일치] 리스트에 없는 포토카드 ID입니다: ${scannedCode}`, 'error');
+                playSound('error');
+                return;
+            }
+
+            // Find first unchecked match
+            const targetItem = matches.find(i => !i.isChecked);
+
+            if (!targetItem) {
+                showToast(`[수량 초과] ${scannedCode} 항목은 이미 검수 완료되었습니다.`, 'warning');
+                playSound('error');
+                return;
+            }
+
+            // Check item
+            targetItem.isChecked = true;
+            const now = new Date();
+            targetItem.checkedTime = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}:${now.getSeconds().toString().padStart(2, '0')}`;
+
+            const isAllComplete = listData.every(i => i.isChecked);
+
+            renderTable();
+            updateStats();
+
+            // Scroll & Highlight matched row
+            const rowElem = document.getElementById(targetItem.id);
+            if (rowElem) {
+                rowElem.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                rowElem.classList.add('ring-2', 'ring-emerald-500', 'bg-emerald-200/80');
+                setTimeout(() => {
+                    rowElem.classList.remove('ring-2', 'ring-emerald-500', 'bg-emerald-200/80');
+                }, 1500);
+            }
+
+            if (isAllComplete) {
+                playSound('complete');
+                showToast(`🎉 [피킹 완료] UID ${currentUID} 유저의 더블체크가 완료되었습니다!`, 'success');
+            } else {
+                playSound('success');
+                showToast(`[확인 완료] ${targetItem.cardId} (컬렉션: ${targetItem.collectionId})`, 'success');
+            }
+
+            focusBarcodeInput();
+        }
+
+        // Filter Tab Handlers
+        [filterAll, filterPending, filterCompleted].forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                [filterAll, filterPending, filterCompleted].forEach(b => {
+                    b.classList.remove('bg-white', 'text-rose-600', 'shadow-xs');
+                    b.classList.add('hover:text-slate-900');
+                });
+                e.target.classList.add('bg-white', 'text-rose-600', 'shadow-xs');
+                e.target.classList.remove('hover:text-slate-900');
+
+                if (e.target === filterAll) activeFilter = 'all';
+                if (e.target === filterPending) activeFilter = 'pending';
+                if (e.target === filterCompleted) activeFilter = 'completed';
+
+                renderTable();
+            });
+        });
+
+        // Barcode Events
+        barcodeInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                processBarcodeScan();
+            }
+        });
+
+        manualCheckBtn.addEventListener('click', processBarcodeScan);
+
+        // Maintain Focus
+        document.addEventListener('click', (e) => {
+            if (listData.length > 0 && 
+                !e.target.closest('button') && 
+                !e.target.closest('input') && 
+                !e.target.closest('#dropZone')) {
+                focusBarcodeInput();
+            }
+        });
+
+        // Export Result Excel
+        exportBtn.addEventListener('click', () => {
+            if (listData.length === 0) return;
+
+            const exportRows = listData.map((item, idx) => ({
+                'No': idx + 1,
+                '유저 ID (UID)': currentUID || '-',
+                '컬렉션 번호': item.collectionId,
+                '입고번호': item.inboundNo,
+                '포토카드 ID': item.cardId,
+                '확인 상태': item.isChecked ? '완료' : '미확인',
+                '확인 시간': item.checkedTime
+            }));
+
+            const worksheet = XLSX.utils.json_to_sheet(exportRows);
+            const workbook = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(workbook, worksheet, "피킹검수결과");
+
+            const filename = `피킹더블체크결과_UID_${currentUID || 'unknown'}_${new Date().toISOString().slice(0, 10)}.xlsx`;
+            XLSX.writeFile(workbook, filename);
+
+            showToast('검수 결과 엑셀 파일이 다운로드되었습니다.', 'success');
+        });
+
+        // Reset App
+        resetBtn.addEventListener('click', () => {
+            if (confirm('현재 진행 중인 피킹 검수 상태를 초기화하시겠습니까?')) {
+                listData = [];
+                currentUID = null;
+                fileInput.value = '';
+                fileNameDisplay.textContent = '엑셀 파일 선택 또는 드롭';
+                fileStatusText.textContent = '파일 대기 중';
+                resetBtn.classList.add('hidden');
+                uidBadge.classList.add('hidden');
+                uidBadge.classList.remove('flex');
+
+                barcodeInput.value = '';
+                barcodeInput.disabled = true;
+                manualCheckBtn.disabled = true;
+                exportBtn.disabled = true;
+
+                renderTable();
+                updateStats();
+                showToast('초기화되었습니다.', 'info');
+            }
+        });
+
+        window.addEventListener('DOMContentLoaded', () => {
+            lucide.createIcons();
+        });
+    </script>
+</body>
+</html>

@@ -371,7 +371,7 @@
             reader.readAsArrayBuffer(file);
         }
 
-        // --- 수정된 엑셀 데이터 파싱 함수 ---
+        // --- 엑셀 자동 감지 파싱 함수 ---
         function processExcelRows(rows, fileName) {
             if (!rows || rows.length === 0) {
                 showToast('엑셀에 데이터가 비어 있습니다.', 'error');
@@ -393,36 +393,44 @@
                 const row = rows[i];
                 if (!row || row.length === 0) continue;
 
-                // 1열: 컬렉션 번호, 2열: 입고번호, 3열: 포토카드 ID
-                const col1 = row[0] !== undefined ? String(row[0]).trim() : '-';
-                const col2 = row[1] !== undefined ? String(row[1]).trim() : '-';
-                let col3 = row[2] !== undefined ? String(row[2]).trim() : '';
+                // 1열: 컬렉션 번호, 2열: 입고번호, 3열: 그룹멤버/포토카드ID, 4열: 포토카드번호(있을 경우)
+                const col1 = row[0] !== undefined && row[0] !== null ? String(row[0]).trim() : '-';
+                const col2 = row[1] !== undefined && row[1] !== null ? String(row[1]).trim() : '-';
+                const col3 = row[2] !== undefined && row[2] !== null ? String(row[2]).trim() : '';
+                const col4 = row[3] !== undefined && row[3] !== null ? String(row[3]).trim() : '';
 
-                // 중복 연결 문자열 처리 (예: "AA29_315452_AA29_315452" -> "AA29_315452")
-                if (col3) {
-                    const len = col3.length;
+                let cardId = '';
+
+                // 4열(포토카드번호)이 존재하는 분리형 엑셀 파일인 경우 (예: 유저_123.xlsx)
+                if (col4) {
+                    cardId = `${col3}_${col4}`;
+                } else {
+                    // 3열에 이미 완결된 포토카드 ID가 들어있는 경우 (예: 14636133_user_collection.xlsx)
+                    cardId = col3;
+                }
+
+                // 중복 결합 문자열 자동 정리 (예: "AA29_315452_AA29_315452" -> "AA29_315452")
+                if (cardId) {
+                    const len = cardId.length;
                     if (len % 2 === 0) {
                         const half = len / 2;
-                        const firstHalf = col3.slice(0, half);
-                        const secondHalf = col3.slice(half);
-                        if (firstHalf === secondHalf) {
-                            col3 = firstHalf;
+                        if (cardId.slice(0, half) === cardId.slice(half)) {
+                            cardId = cardId.slice(0, half);
                         }
                     }
-                    
-                    // 언더바 구분 중복 처리 보완 (예: AA29_315452_AA29_315452)
-                    const parts = col3.split('_');
+
+                    const parts = cardId.split('_');
                     if (parts.length === 4 && parts[0] === parts[2] && parts[1] === parts[3]) {
-                        col3 = `${parts[0]}_${parts[1]}`;
+                        cardId = `${parts[0]}_${parts[1]}`;
                     }
                 }
 
-                if (col3) {
+                if (cardId) {
                     listData.push({
-                        id: `row-${i}-${col3}`,
+                        id: `row-${i}-${cardId}`,
                         collectionId: col1,
                         inboundNo: col2,
-                        cardId: col3,
+                        cardId: cardId,
                         isChecked: false,
                         checkedTime: '-'
                     });
@@ -430,12 +438,12 @@
             }
 
             if (listData.length === 0) {
-                showToast('3열에서 포토카드 ID를 찾을 수 없습니다.', 'error');
+                showToast('엑셀 파일에서 포토카드 ID 데이터를 찾을 수 없습니다.', 'error');
                 playSound('error');
                 return;
             }
 
-            // UI 상태 업데이트
+            // UI 업데이트
             fileNameDisplay.textContent = fileName;
             fileStatusText.textContent = '업로드 완료';
             resetBtn.classList.remove('hidden');

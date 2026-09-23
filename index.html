@@ -134,7 +134,7 @@
                 <input 
                     type="text" 
                     id="barcodeInput" 
-                    placeholder="바코드를 스캔하세요 (예: AA06_214749)..." 
+                    placeholder="바코드를 스캔하세요 (예: AA29_315452)..." 
                     class="w-full pl-11 pr-24 py-3 bg-slate-50 border-2 border-rose-200 focus:border-rose-500 rounded-xl text-slate-900 placeholder-slate-400 font-mono font-semibold text-base focus:outline-none focus:ring-4 focus:ring-rose-100 transition-all pulse-border"
                     disabled
                 >
@@ -371,6 +371,7 @@
             reader.readAsArrayBuffer(file);
         }
 
+        // --- 수정된 엑셀 데이터 파싱 함수 ---
         function processExcelRows(rows, fileName) {
             if (!rows || rows.length === 0) {
                 showToast('엑셀에 데이터가 비어 있습니다.', 'error');
@@ -380,7 +381,7 @@
             listData = [];
             let startRow = 0;
 
-            // Detect Header
+            // 헤더 행 감지
             if (rows.length > 0 && rows[0][0]) {
                 const firstVal = String(rows[0][0]).trim().toLowerCase();
                 if (firstVal.includes('컬렉션') || firstVal.includes('collection') || firstVal.includes('id') || firstVal.includes('번호')) {
@@ -392,15 +393,26 @@
                 const row = rows[i];
                 if (!row || row.length === 0) continue;
 
-                // Col 1: 컬렉션 번호, Col 2: 입고번호, Col 3: 포토카드 ID
+                // 1열: 컬렉션 번호, 2열: 입고번호, 3열: 포토카드 ID
                 const col1 = row[0] !== undefined ? String(row[0]).trim() : '-';
                 const col2 = row[1] !== undefined ? String(row[1]).trim() : '-';
                 let col3 = row[2] !== undefined ? String(row[2]).trim() : '';
 
-                // [중복 방지 핵심 로직] 'AA29_315452_AA29_315452' 같은 형태일 경우 반복값 잘라내기
+                // 중복 연결 문자열 처리 (예: "AA29_315452_AA29_315452" -> "AA29_315452")
                 if (col3) {
+                    const len = col3.length;
+                    if (len % 2 === 0) {
+                        const half = len / 2;
+                        const firstHalf = col3.slice(0, half);
+                        const secondHalf = col3.slice(half);
+                        if (firstHalf === secondHalf) {
+                            col3 = firstHalf;
+                        }
+                    }
+                    
+                    // 언더바 구분 중복 처리 보완 (예: AA29_315452_AA29_315452)
                     const parts = col3.split('_');
-                    if (parts.length >= 4 && parts[0] === parts[2] && parts[1] === parts[3]) {
+                    if (parts.length === 4 && parts[0] === parts[2] && parts[1] === parts[3]) {
                         col3 = `${parts[0]}_${parts[1]}`;
                     }
                 }
@@ -423,7 +435,7 @@
                 return;
             }
 
-            // Update Interface
+            // UI 상태 업데이트
             fileNameDisplay.textContent = fileName;
             fileStatusText.textContent = '업로드 완료';
             resetBtn.classList.remove('hidden');

@@ -93,16 +93,32 @@
                 </div>
             </div>
 
-            <!-- Stats Counter Cards -->
+            <!-- Stats Counter Cards with Progress Bar -->
             <div class="lg:col-span-2 bg-white border border-slate-200 rounded-2xl p-5 shadow-xs flex flex-col justify-between">
-                <div class="flex justify-between items-center mb-3">
-                    <h2 class="text-sm font-bold text-slate-800 flex items-center gap-2">
-                        <i data-lucide="bar-chart-3" class="w-4 h-4 text-rose-500"></i>
-                        더블체크 현황
-                    </h2>
-                    <span id="completionBadge" class="hidden px-3 py-1 text-xs font-extrabold bg-emerald-100 text-emerald-800 border border-emerald-300 rounded-full items-center gap-1.5 animate-pulse shadow-xs">
-                        <i data-lucide="check-circle-2" class="w-4 h-4 text-emerald-600"></i> 검수 완료!
-                    </span>
+                <div>
+                    <!-- Header Row in Card -->
+                    <div class="flex justify-between items-center mb-3">
+                        <h2 class="text-sm font-bold text-slate-800 flex items-center gap-2">
+                            <i data-lucide="bar-chart-3" class="w-4 h-4 text-rose-500"></i>
+                            더블체크 현황
+                        </h2>
+                        <span id="completionBadge" class="hidden px-3 py-1 text-xs font-extrabold bg-emerald-100 text-emerald-800 border border-emerald-300 rounded-full items-center gap-1.5 animate-pulse shadow-xs">
+                            <i data-lucide="check-circle-2" class="w-4 h-4 text-emerald-600"></i> 검수 완료!
+                        </span>
+                    </div>
+
+                    <!-- Progress Bar Area -->
+                    <div class="bg-slate-50 p-3.5 rounded-xl border border-slate-200/80 mb-4">
+                        <div class="flex justify-between items-center mb-1.5">
+                            <span class="text-xs font-bold text-slate-600 flex items-center gap-1">
+                                <i data-lucide="activity" class="w-3.5 h-3.5 text-emerald-500"></i> 검수 진행률
+                            </span>
+                            <span id="progressPercent" class="text-sm font-extrabold text-emerald-600 font-mono">0%</span>
+                        </div>
+                        <div class="w-full bg-slate-200 rounded-full h-3.5 overflow-hidden p-0.5">
+                            <div id="progressBar" class="bg-gradient-to-r from-emerald-400 to-emerald-500 h-full rounded-full transition-all duration-300 w-0"></div>
+                        </div>
+                    </div>
                 </div>
 
                 <!-- Numbers Cards Grid -->
@@ -210,6 +226,8 @@
         const statCheckedUnits = document.getElementById('statCheckedUnits');
         const statRemainingUnits = document.getElementById('statRemainingUnits');
         const completionBadge = document.getElementById('completionBadge');
+        const progressBar = document.getElementById('progressBar');
+        const progressPercent = document.getElementById('progressPercent');
 
         const filterAll = document.getElementById('filterAll');
         const filterPending = document.getElementById('filterPending');
@@ -341,10 +359,7 @@
                     const firstSheetName = workbook.SheetNames[0];
                     const worksheet = workbook.Sheets[firstSheetName];
                     
-                    // JSON 객체로 파싱 (헤더 자동 판별)
                     const jsonObjects = XLSX.utils.sheet_to_json(worksheet, { defval: "" });
-                    
-                    // 2D 배열로도 파싱 (헤더가 없을 때 대비)
                     const jsonArrays = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: "" });
 
                     processExcelRows(jsonObjects, jsonArrays, file.name);
@@ -357,7 +372,20 @@
             reader.readAsArrayBuffer(file);
         }
 
-        // --- 엑셀 자동 인식 및 포토카드 코드 자동 결합 로직 ---
+        function cleanCardId(rawCardId) {
+            if (!rawCardId) return '';
+            let val = String(rawCardId).trim();
+            
+            // AA29_315452_AA29_315452 와 같이 동일 문자열이 이중 중복된 경우 보정
+            if (val.includes('_')) {
+                const parts = val.split('_');
+                if (parts.length === 4 && parts[0] === parts[2] && parts[1] === parts[3]) {
+                    return `${parts[0]}_${parts[1]}`;
+                }
+            }
+            return val;
+        }
+
         function processExcelRows(objects, arrays, fileName) {
             listData = [];
 
@@ -365,42 +393,37 @@
                 const sample = objects[0];
                 const keys = Object.keys(sample);
 
-                // 열 이름 찾기
                 const colCollection = keys.find(k => k.includes('id') || k.includes('컬렉션')) || keys[0];
                 const colInbound = keys.find(k => k.includes('입고번호')) || keys[1];
+                const colFullCard = keys.find(k => k.includes('그룹멤버포토카드번호') || k.includes('포토카드ID') || k.includes('포토카드 ID') || k.includes('바코드'));
                 const colMember = keys.find(k => k === '그룹멤버' || k.includes('멤버'));
                 const colCardNum = keys.find(k => k === '포토카드번호' || k.includes('포토카드'));
-                const colFullCard = keys.find(k => k.includes('그룹멤버포토카드번호') || k.includes('포토카드ID') || k.includes('바코드'));
 
                 objects.forEach((row, idx) => {
                     const cId = String(row[colCollection] || '').trim();
                     const inNo = String(row[colInbound] || '').trim();
                     let cardId = '';
 
-                    // 1) 멤버코드와 포토카드번호가 분리되어 있는 양식 (유저_123.xlsx)
-                    if (colMember && colCardNum && row[colMember] !== undefined && row[colCardNum] !== undefined) {
+                    // 1. 완성된 포토카드 ID / 바코드 열이 있는 경우 우선 파싱
+                    if (colFullCard && row[colFullCard]) {
+                        cardId = String(row[colFullCard]).trim();
+                    }
+
+                    // 2. 완성 열이 없고 그룹멤버 / 포토카드번호로 분리되어 있는 경우 조합
+                    if (!cardId && colMember && colCardNum && row[colMember] !== undefined && row[colCardNum] !== undefined) {
                         const mVal = String(row[colMember]).trim();
                         const cVal = String(row[colCardNum]).trim();
                         if (mVal && cVal) {
                             cardId = `${mVal}_${cVal}`;
                         }
                     }
-                    
-                    // 2) 이미 하나의 풀 코드로 들어있는 양식 (14636133_user_collection.xlsx)
-                    if (!cardId && colFullCard && row[colFullCard]) {
-                        cardId = String(row[colFullCard]).trim();
-                    }
 
-                    // 3) 키 매칭 실패 시 열 순서(3열, 4열)로 결합
-                    if (!cardId && keys.length >= 4) {
-                        const val3 = String(row[keys[2]] || '').trim();
-                        const val4 = String(row[keys[3]] || '').trim();
-                        if (val3 && val4) {
-                            cardId = `${val3}_${val4}`;
-                        }
-                    } else if (!cardId && keys.length >= 3) {
+                    // 3. 인덱스 기반 대체 파싱
+                    if (!cardId && keys.length >= 3) {
                         cardId = String(row[keys[2]] || '').trim();
                     }
+
+                    cardId = cleanCardId(cardId);
 
                     if (cardId && cId) {
                         listData.push({
@@ -415,7 +438,6 @@
                 });
             }
 
-            // 만약 객체 파싱 실패 시 배열(arrays) 기반 예비 처리
             if (listData.length === 0 && arrays && arrays.length > 0) {
                 let startIdx = 0;
                 if (arrays[0] && String(arrays[0][0]).toLowerCase().includes('id')) {
@@ -426,13 +448,7 @@
                     if (!row || row.length === 0) continue;
                     const cId = String(row[0] || '').trim();
                     const inNo = String(row[1] || '').trim();
-                    let cardId = '';
-
-                    if (row.length >= 4 && row[2] && row[3]) {
-                        cardId = `${String(row[2]).trim()}_${String(row[3]).trim()}`;
-                    } else if (row.length >= 3 && row[2]) {
-                        cardId = String(row[2]).trim();
-                    }
+                    let cardId = cleanCardId(row[2]);
 
                     if (cardId && cId) {
                         listData.push({
@@ -453,7 +469,6 @@
                 return;
             }
 
-            // UI 업데이트
             fileNameDisplay.textContent = fileName;
             fileStatusText.textContent = '업로드 완료';
             resetBtn.classList.remove('hidden');
@@ -524,10 +539,16 @@
             const total = listData.length;
             const checked = listData.filter(i => i.isChecked).length;
             const remaining = total - checked;
+            const percent = total > 0 ? Math.round((checked / total) * 100) : 0;
 
             statTargetUnits.textContent = total.toLocaleString();
             statCheckedUnits.textContent = checked.toLocaleString();
             statRemainingUnits.textContent = remaining.toLocaleString();
+
+            if (progressBar && progressPercent) {
+                progressBar.style.width = `${percent}%`;
+                progressPercent.textContent = `${percent}%`;
+            }
 
             if (checked === total && total > 0) {
                 completionBadge.classList.remove('hidden');

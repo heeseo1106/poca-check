@@ -275,38 +275,29 @@
 
         function parseData(rows) {
             excelData = [];
-            const headers = rows[0].map(h => String(h || '').trim());
             
-            let collectionIdx = 0, shippingIdx = 1, memberCodeIdx = -1, photoCardIdx = -1, combinedIdx = -1;
-
-            headers.forEach((h, idx) => {
-                if (h.includes('id') || h.includes('컬렉션')) collectionIdx = idx;
-                if (h.includes('입고')) shippingIdx = idx;
-                if (h.includes('그룹') || h.includes('멤버')) memberCodeIdx = idx;
-                if (h.includes('포토카드') || h.includes('카드')) photoCardIdx = idx;
-                if (h.includes('MemberCode_ID') || h.includes('조합')) combinedIdx = idx;
-            });
-
             for (let i = 1; i < rows.length; i++) {
                 const row = rows[i];
                 if (!row || row.length === 0) continue;
 
-                let collectionNo = row[collectionIdx] !== undefined ? String(row[collectionIdx]).trim() : '';
-                let shippingNo = row[shippingIdx] !== undefined ? String(row[shippingIdx]).trim() : '';
+                let collectionNo = row[0] !== undefined ? String(row[0]).trim() : '';
+                let shippingNo = row[1] !== undefined ? String(row[1]).trim() : '';
                 let photoCardId = '';
 
-                // 분리형 및 결합형 단일 로직 적용 (중복 생성 방지)
-                if (combinedIdx !== -1 && row[combinedIdx]) {
-                    photoCardId = String(row[combinedIdx]).trim();
-                } else if (memberCodeIdx !== -1 && photoCardIdx !== -1 && row[memberCodeIdx] !== undefined && row[photoCardIdx] !== undefined) {
-                    photoCardId = `${String(row[memberCodeIdx]).trim()}_${String(row[photoCardIdx]).trim()}`;
-                } else if (row[2] !== undefined && row[3] !== undefined) {
-                    photoCardId = `${String(row[2]).trim()}_${String(row[3]).trim()}`;
-                } else if (row[2] !== undefined) {
-                    photoCardId = String(row[2]).trim();
+                let col3 = row[2] !== undefined ? String(row[2]).trim() : '';
+                let col4 = row[3] !== undefined ? String(row[3]).trim() : '';
+
+                // 이미 'AA01_123456' 처럼 하나의 코드일 경우
+                if (col3.includes('_')) {
+                    photoCardId = col3;
+                } else if (col3 && col4) {
+                    // 멤버코드(col3) + 포토카드번호(col4) 조합
+                    photoCardId = `${col3}_${col4}`;
+                } else if (col3) {
+                    photoCardId = col3;
                 }
 
-                if (photoCardId && photoCardId !== '_') {
+                if (photoCardId) {
                     excelData.push({
                         id: i,
                         collectionNo: collectionNo,

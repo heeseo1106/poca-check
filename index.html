@@ -96,7 +96,8 @@
             <!-- Stats Counter Cards with Progress Bar -->
             <div class="lg:col-span-2 bg-white border border-slate-200 rounded-2xl p-5 shadow-xs flex flex-col justify-between">
                 <div>
-                    <div class="flex justify-between items-center mb-2">
+                    <!-- Header Row in Card -->
+                    <div class="flex justify-between items-center mb-3">
                         <h2 class="text-sm font-bold text-slate-800 flex items-center gap-2">
                             <i data-lucide="bar-chart-3" class="w-4 h-4 text-rose-500"></i>
                             더블체크 현황
@@ -106,20 +107,22 @@
                         </span>
                     </div>
 
-                    <!-- Progress Bar Component -->
-                    <div class="mb-4 my-2">
+                    <!-- Progress Bar Area -->
+                    <div class="bg-slate-50 p-3.5 rounded-xl border border-slate-200/80 mb-4">
                         <div class="flex justify-between items-center mb-1.5">
-                            <span class="text-xs font-semibold text-slate-500">진행률</span>
-                            <span id="progressPercent" class="text-xs font-bold text-emerald-600 font-mono">0%</span>
+                            <span class="text-xs font-bold text-slate-600 flex items-center gap-1">
+                                <i data-lucide="activity" class="w-3.5 h-3.5 text-emerald-500"></i> 검수 진행률
+                            </span>
+                            <span id="progressPercent" class="text-sm font-extrabold text-emerald-600 font-mono">0%</span>
                         </div>
-                        <div class="w-full bg-slate-100 rounded-full h-3 overflow-hidden border border-slate-200 p-0.5">
+                        <div class="w-full bg-slate-200 rounded-full h-3.5 overflow-hidden p-0.5">
                             <div id="progressBar" class="bg-gradient-to-r from-emerald-400 to-emerald-500 h-full rounded-full transition-all duration-300 w-0"></div>
                         </div>
                     </div>
                 </div>
 
                 <!-- Numbers Cards Grid -->
-                <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-2">
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
                     <div class="bg-slate-50 border border-slate-200/80 rounded-xl p-4">
                         <span class="text-xs font-semibold text-slate-500 block mb-1">총 피킹 수량</span>
                         <div class="text-2xl font-extrabold text-slate-900"><span id="statTargetUnits">0</span> <span class="text-xs text-slate-400 font-normal">개</span></div>
@@ -525,6 +528,7 @@
             lucide.createIcons();
         }
 
+        // --- 숫자 카운트 및 프로그레스 바 실시간 업데이트 함수 ---
         function updateStats() {
             const total = listData.length;
             const checked = listData.filter(i => i.isChecked).length;
@@ -535,9 +539,11 @@
             statCheckedUnits.textContent = checked.toLocaleString();
             statRemainingUnits.textContent = remaining.toLocaleString();
 
-            // Progress Bar Update
-            progressBar.style.width = `${percent}%`;
-            progressPercent.textContent = `${percent}%`;
+            // 프로그레스 바 너비 및 텍스트 설정
+            if (progressBar && progressPercent) {
+                progressBar.style.width = `${percent}%`;
+                progressPercent.textContent = `${percent}%`;
+            }
 
             if (checked === total && total > 0) {
                 completionBadge.classList.remove('hidden');

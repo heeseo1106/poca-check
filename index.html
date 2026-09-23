@@ -15,7 +15,6 @@
         body {
             font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
         }
-        /* Custom scrollbar for table */
         ::-webkit-scrollbar {
             width: 8px;
             height: 8px;
@@ -47,7 +46,6 @@
     <header class="bg-white border-b border-slate-200 sticky top-0 z-40 shadow-xs">
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 sm:h-20 flex items-center justify-between">
             <div class="flex items-center space-x-3.5">
-                <!-- Coral Red Icon Box -->
                 <div class="p-2.5 bg-rose-500 rounded-xl text-white shadow-md shadow-rose-200">
                     <i data-lucide="scan-line" class="w-6 h-6 sm:w-7 sm:h-7"></i>
                 </div>
@@ -148,7 +146,7 @@
             </button>
         </div>
 
-        <!-- Main Data Table (4 Columns) -->
+        <!-- Main Data Table -->
         <div class="bg-white border border-slate-200 rounded-2xl shadow-xs flex-1 flex flex-col overflow-hidden min-h-[420px]">
             <div class="p-4 border-b border-slate-200 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 bg-slate-50/80">
                 <h3 class="font-bold text-slate-800 flex items-center gap-2 text-sm">
@@ -156,7 +154,6 @@
                     피킹 검수 목록
                 </h3>
                 
-                <!-- Filter Tabs -->
                 <div class="flex items-center bg-slate-200/70 p-1 rounded-xl text-xs font-semibold text-slate-600 self-stretch sm:self-auto justify-stretch">
                     <button id="filterAll" class="filter-tab active flex-1 sm:flex-none px-3 py-1 rounded-lg bg-white text-rose-600 shadow-xs transition-all">전체</button>
                     <button id="filterPending" class="filter-tab flex-1 sm:flex-none px-3 py-1 rounded-lg hover:text-slate-900 transition-all">미검수</button>
@@ -175,7 +172,6 @@
                         </tr>
                     </thead>
                     <tbody id="tableBody" class="divide-y divide-slate-100 font-mono">
-                        <!-- Empty State -->
                         <tr id="emptyRow">
                             <td colspan="4" class="py-24 text-center text-slate-400 font-sans">
                                 <i data-lucide="file-spreadsheet" class="w-12 h-12 mx-auto mb-3 text-slate-300"></i>
@@ -190,17 +186,14 @@
 
     </main>
 
-    <!-- Notification Toast Container -->
     <div id="toastContainer" class="fixed bottom-5 right-5 z-50 flex flex-col gap-2 pointer-events-none"></div>
 
     <script>
-        // --- State Management ---
-        let listData = []; // Array of { id, collectionId, inboundNo, cardId, isChecked, checkedTime }
+        let listData = [];
         let currentUID = null;
-        let activeFilter = 'all'; // 'all', 'pending', 'completed'
+        let activeFilter = 'all';
         let audioCtx = null;
 
-        // --- DOM Elements ---
         const dropZone = document.getElementById('dropZone');
         const fileInput = document.getElementById('fileInput');
         const fileNameDisplay = document.getElementById('fileNameDisplay');
@@ -212,32 +205,24 @@
         const manualCheckBtn = document.getElementById('manualCheckBtn');
         const exportBtn = document.getElementById('exportBtn');
         const tableBody = document.getElementById('tableBody');
-        const emptyRow = document.getElementById('emptyRow');
         
-        // Stats Elements
         const statTargetUnits = document.getElementById('statTargetUnits');
         const statCheckedUnits = document.getElementById('statCheckedUnits');
         const statRemainingUnits = document.getElementById('statRemainingUnits');
         const completionBadge = document.getElementById('completionBadge');
 
-        // Filter Elements
         const filterAll = document.getElementById('filterAll');
         const filterPending = document.getElementById('filterPending');
         const filterCompleted = document.getElementById('filterCompleted');
 
-        // --- Audio Feedback (Web Audio API) ---
         function initAudio() {
-            if (!audioCtx) {
-                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-            }
+            if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
         }
 
         function playSound(type) {
             try {
                 initAudio();
-                if (audioCtx.state === 'suspended') {
-                    audioCtx.resume();
-                }
+                if (audioCtx.state === 'suspended') audioCtx.resume();
 
                 const osc = audioCtx.createOscillator();
                 const gain = audioCtx.createGain();
@@ -245,7 +230,6 @@
                 gain.connect(audioCtx.destination);
 
                 if (type === 'success') {
-                    // High-tone beep for valid scan
                     osc.type = 'sine';
                     osc.frequency.setValueAtTime(1000, audioCtx.currentTime);
                     gain.gain.setValueAtTime(0.12, audioCtx.currentTime);
@@ -253,7 +237,6 @@
                     osc.start();
                     osc.stop(audioCtx.currentTime + 0.12);
                 } else if (type === 'complete') {
-                    // Success fanfare
                     [523.25, 659.25, 783.99, 1046.50].forEach((freq, i) => {
                         const o = audioCtx.createOscillator();
                         const g = audioCtx.createGain();
@@ -266,7 +249,6 @@
                         o.stop(audioCtx.currentTime + i * 0.08 + 0.35);
                     });
                 } else if (type === 'error') {
-                    // Error buzzer
                     osc.type = 'sawtooth';
                     osc.frequency.setValueAtTime(180, audioCtx.currentTime);
                     gain.gain.setValueAtTime(0.18, audioCtx.currentTime);
@@ -275,7 +257,7 @@
                     osc.stop(audioCtx.currentTime + 0.25);
                 }
             } catch (e) {
-                console.warn('Audio play error:', e);
+                console.warn(e);
             }
         }
 
@@ -348,7 +330,6 @@
                 return;
             }
 
-            // Extract numbers from filename for UID
             const match = file.name.match(/\d+/);
             currentUID = match ? match[0] : file.name.replace(/\.[^/.]+$/, "");
 
@@ -359,9 +340,14 @@
                     const workbook = XLSX.read(data, { type: 'array' });
                     const firstSheetName = workbook.SheetNames[0];
                     const worksheet = workbook.Sheets[firstSheetName];
-                    const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+                    
+                    // JSON 객체로 파싱 (헤더 자동 판별)
+                    const jsonObjects = XLSX.utils.sheet_to_json(worksheet, { defval: "" });
+                    
+                    // 2D 배열로도 파싱 (헤더가 없을 때 대비)
+                    const jsonArrays = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: "" });
 
-                    processExcelRows(jsonData, file.name);
+                    processExcelRows(jsonObjects, jsonArrays, file.name);
                 } catch (err) {
                     console.error(err);
                     showToast('엑셀 파일 읽기 실패. 파일 구성을 확인해 주세요.', 'error');
@@ -371,74 +357,98 @@
             reader.readAsArrayBuffer(file);
         }
 
-        // --- 엑셀 자동 감지 파싱 함수 ---
-        function processExcelRows(rows, fileName) {
-            if (!rows || rows.length === 0) {
-                showToast('엑셀에 데이터가 비어 있습니다.', 'error');
-                return;
-            }
-
+        // --- 엑셀 자동 인식 및 포토카드 코드 자동 결합 로직 ---
+        function processExcelRows(objects, arrays, fileName) {
             listData = [];
-            let startRow = 0;
 
-            // 헤더 행 감지
-            if (rows.length > 0 && rows[0][0]) {
-                const firstVal = String(rows[0][0]).trim().toLowerCase();
-                if (firstVal.includes('컬렉션') || firstVal.includes('collection') || firstVal.includes('id') || firstVal.includes('번호')) {
-                    startRow = 1;
-                }
-            }
+            if (objects && objects.length > 0) {
+                const sample = objects[0];
+                const keys = Object.keys(sample);
 
-            for (let i = startRow; i < rows.length; i++) {
-                const row = rows[i];
-                if (!row || row.length === 0) continue;
+                // 열 이름 찾기
+                const colCollection = keys.find(k => k.includes('id') || k.includes('컬렉션')) || keys[0];
+                const colInbound = keys.find(k => k.includes('입고번호')) || keys[1];
+                const colMember = keys.find(k => k === '그룹멤버' || k.includes('멤버'));
+                const colCardNum = keys.find(k => k === '포토카드번호' || k.includes('포토카드'));
+                const colFullCard = keys.find(k => k.includes('그룹멤버포토카드번호') || k.includes('포토카드ID') || k.includes('바코드'));
 
-                // 1열: 컬렉션 번호, 2열: 입고번호, 3열: 그룹멤버/포토카드ID, 4열: 포토카드번호(있을 경우)
-                const col1 = row[0] !== undefined && row[0] !== null ? String(row[0]).trim() : '-';
-                const col2 = row[1] !== undefined && row[1] !== null ? String(row[1]).trim() : '-';
-                const col3 = row[2] !== undefined && row[2] !== null ? String(row[2]).trim() : '';
-                const col4 = row[3] !== undefined && row[3] !== null ? String(row[3]).trim() : '';
+                objects.forEach((row, idx) => {
+                    const cId = String(row[colCollection] || '').trim();
+                    const inNo = String(row[colInbound] || '').trim();
+                    let cardId = '';
 
-                let cardId = '';
-
-                // 4열(포토카드번호)이 존재하는 분리형 엑셀 파일인 경우 (예: 유저_123.xlsx)
-                if (col4) {
-                    cardId = `${col3}_${col4}`;
-                } else {
-                    // 3열에 이미 완결된 포토카드 ID가 들어있는 경우 (예: 14636133_user_collection.xlsx)
-                    cardId = col3;
-                }
-
-                // 중복 결합 문자열 자동 정리 (예: "AA29_315452_AA29_315452" -> "AA29_315452")
-                if (cardId) {
-                    const len = cardId.length;
-                    if (len % 2 === 0) {
-                        const half = len / 2;
-                        if (cardId.slice(0, half) === cardId.slice(half)) {
-                            cardId = cardId.slice(0, half);
+                    // 1) 멤버코드와 포토카드번호가 분리되어 있는 양식 (유저_123.xlsx)
+                    if (colMember && colCardNum && row[colMember] !== undefined && row[colCardNum] !== undefined) {
+                        const mVal = String(row[colMember]).trim();
+                        const cVal = String(row[colCardNum]).trim();
+                        if (mVal && cVal) {
+                            cardId = `${mVal}_${cVal}`;
                         }
                     }
-
-                    const parts = cardId.split('_');
-                    if (parts.length === 4 && parts[0] === parts[2] && parts[1] === parts[3]) {
-                        cardId = `${parts[0]}_${parts[1]}`;
+                    
+                    // 2) 이미 하나의 풀 코드로 들어있는 양식 (14636133_user_collection.xlsx)
+                    if (!cardId && colFullCard && row[colFullCard]) {
+                        cardId = String(row[colFullCard]).trim();
                     }
-                }
 
-                if (cardId) {
-                    listData.push({
-                        id: `row-${i}-${cardId}`,
-                        collectionId: col1,
-                        inboundNo: col2,
-                        cardId: cardId,
-                        isChecked: false,
-                        checkedTime: '-'
-                    });
+                    // 3) 키 매칭 실패 시 열 순서(3열, 4열)로 결합
+                    if (!cardId && keys.length >= 4) {
+                        const val3 = String(row[keys[2]] || '').trim();
+                        const val4 = String(row[keys[3]] || '').trim();
+                        if (val3 && val4) {
+                            cardId = `${val3}_${val4}`;
+                        }
+                    } else if (!cardId && keys.length >= 3) {
+                        cardId = String(row[keys[2]] || '').trim();
+                    }
+
+                    if (cardId && cId) {
+                        listData.push({
+                            id: `row-${idx}-${cardId}`,
+                            collectionId: cId,
+                            inboundNo: inNo,
+                            cardId: cardId,
+                            isChecked: false,
+                            checkedTime: '-'
+                        });
+                    }
+                });
+            }
+
+            // 만약 객체 파싱 실패 시 배열(arrays) 기반 예비 처리
+            if (listData.length === 0 && arrays && arrays.length > 0) {
+                let startIdx = 0;
+                if (arrays[0] && String(arrays[0][0]).toLowerCase().includes('id')) {
+                    startIdx = 1;
+                }
+                for (let i = startIdx; i < arrays.length; i++) {
+                    const row = arrays[i];
+                    if (!row || row.length === 0) continue;
+                    const cId = String(row[0] || '').trim();
+                    const inNo = String(row[1] || '').trim();
+                    let cardId = '';
+
+                    if (row.length >= 4 && row[2] && row[3]) {
+                        cardId = `${String(row[2]).trim()}_${String(row[3]).trim()}`;
+                    } else if (row.length >= 3 && row[2]) {
+                        cardId = String(row[2]).trim();
+                    }
+
+                    if (cardId && cId) {
+                        listData.push({
+                            id: `row-${i}-${cardId}`,
+                            collectionId: cId,
+                            inboundNo: inNo,
+                            cardId: cardId,
+                            isChecked: false,
+                            checkedTime: '-'
+                        });
+                    }
                 }
             }
 
             if (listData.length === 0) {
-                showToast('엑셀 파일에서 포토카드 ID 데이터를 찾을 수 없습니다.', 'error');
+                showToast('엑셀 파일에서 포토카드 데이터를 인식하지 못했습니다.', 'error');
                 playSound('error');
                 return;
             }
@@ -546,7 +556,6 @@
                 return;
             }
 
-            // Match scanned code against cardId (Column 3)
             const matches = listData.filter(i => i.cardId.toLowerCase() === scannedCode.toLowerCase());
 
             if (matches.length === 0) {
@@ -555,7 +564,6 @@
                 return;
             }
 
-            // Find first unchecked match
             const targetItem = matches.find(i => !i.isChecked);
 
             if (!targetItem) {
@@ -564,7 +572,6 @@
                 return;
             }
 
-            // Check item
             targetItem.isChecked = true;
             const now = new Date();
             targetItem.checkedTime = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}:${now.getSeconds().toString().padStart(2, '0')}`;
@@ -574,7 +581,6 @@
             renderTable();
             updateStats();
 
-            // Scroll & Highlight matched row
             const rowElem = document.getElementById(targetItem.id);
             if (rowElem) {
                 rowElem.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -595,7 +601,6 @@
             focusBarcodeInput();
         }
 
-        // Filter Tab Handlers
         [filterAll, filterPending, filterCompleted].forEach(btn => {
             btn.addEventListener('click', (e) => {
                 [filterAll, filterPending, filterCompleted].forEach(b => {
@@ -613,7 +618,6 @@
             });
         });
 
-        // Barcode Events
         barcodeInput.addEventListener('keydown', (e) => {
             if (e.key === 'Enter') {
                 e.preventDefault();
@@ -623,7 +627,6 @@
 
         manualCheckBtn.addEventListener('click', processBarcodeScan);
 
-        // Maintain Focus
         document.addEventListener('click', (e) => {
             if (listData.length > 0 && 
                 !e.target.closest('button') && 
@@ -633,7 +636,6 @@
             }
         });
 
-        // Export Result Excel
         exportBtn.addEventListener('click', () => {
             if (listData.length === 0) return;
 
@@ -657,7 +659,6 @@
             showToast('검수 결과 엑셀 파일이 다운로드되었습니다.', 'success');
         });
 
-        // Reset App
         resetBtn.addEventListener('click', () => {
             if (confirm('현재 진행 중인 피킹 검수 상태를 초기화하시겠습니까?')) {
                 listData = [];
